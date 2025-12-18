@@ -1,0 +1,52 @@
+name: CI-CD using AWS CodeDeploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build application
+        run: mvn clean package -DskipTests
+
+      - name: Prepare deployment directory
+        run: |
+          mkdir app
+          cp target/*.jar app/
+          cp -r scripts appspec.yml app/
+
+      - name: Create deployment artifact
+        run: |
+          cd app
+          zip -r ../app.zip .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Upload artifact to S3
+        run: |
+          aws s3 cp app.zip s3://techeazy-devops-app-builds/app.zip
+
+      - name: Trigger CodeDeploy deployment
+        run: |
+          aws deploy create-deployment \
+            --application-name tech-eazy-app \
+            --deployment-group-name tech-eazy-dg-dev \
+            --s3-location bucket=techeazy-devops-app-builds,key=app.zip,bundleType=zip
